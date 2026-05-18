@@ -484,4 +484,19 @@ const changePassword = async (req, res) => {
         res.status(500).json({ message: "Server error changing password" })
     }
 }
-module.exports = { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteAdmin, deleteFarmer, deleteSelf, toggleFarmerStatus, toggleAdminStatus,uploadAvatar, changePassword }
+
+// Update crop profile
+const updateCropProfile = async (req, res) => {
+    try {
+        const { cropProfiles } = req.body
+        const updated = await User.findByIdAndUpdate(
+            req.user._id,
+            { cropProfiles },
+            { new: true }
+        )
+        res.status(200).json({ message: "Profile updated", user: updated })
+    } catch (error) {
+        res.status(500).json({ message: "Failed to update profile" })
+    }
+}
+module.exports = { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteAdmin, deleteFarmer, deleteSelf, toggleFarmerStatus, toggleAdminStatus,uploadAvatar, changePassword, updateCropProfile }

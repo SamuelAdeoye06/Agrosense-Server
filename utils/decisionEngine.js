@@ -1,129 +1,147 @@
 // ─────────────────────────────────────────────────────────────
 // decisionEngine.js
-// Pure function — no DB calls, no side effects.
-// Takes weather data + rules + crop categories → decision.
-// Called per day when building the 7-day forecast.
+// Evaluates one day's weather against 4 farming activities:
+// planting, harvesting, spraying, irrigation.
+// Returns recommended activities + crop-specific tips + alert.
 // ─────────────────────────────────────────────────────────────
 
-const CATEGORY_ADVICE = {
-
+// ── Crop category tips per activity ──
+const CATEGORY_TIPS = {
     grains: {
         name:     "Grains & Cereals",
-        examples: "maize, rice, sorghum, millet, wheat, fonio",
+        examples: "maize, rice, sorghum, millet, wheat",
         icon:     "🌾",
-        goodDay:      "Good conditions for grain planting, germination and growth.",
-        badDay:       "Not ideal for grains today. Delay planting or field operations.",
-        highHumidity: "High humidity alert for grains: watch for fungal diseases like leaf blight, rust and smut. Ensure field drainage is clear.",
-        highWind:     "Strong wind can cause lodging in tall cereals like maize and sorghum. Check and stake young plants.",
-        drought:      "Low moisture levels. Irrigate grain crops early morning to prevent heat and drought stress.",
-        heatStress:   "Extreme heat can affect grain filling and pollen viability. Water crops and avoid midday field work.",
-        coldStress:   "Low temperature slows germination and early growth in grains. Delay planting until soil warms."
+        planting:   "Good conditions for grain planting and germination.",
+        harvesting: "Dry conditions suit grain harvesting. Ensure grains are fully dry before storage.",
+        spraying:   "Good day to apply herbicides or foliar fertilizer to grain crops.",
+        irrigation: "Irrigate grain crops early morning to reduce evaporation loss.",
+        warning:    {
+            highHumidity: "High humidity risk: watch for leaf blight, rust and smut in cereals.",
+            highWind:     "Strong wind can cause maize and sorghum lodging. Stake young plants.",
+            drought:      "Drought stress will reduce grain yield. Irrigate consistently.",
+            heat:         "High heat affects grain filling. Water crops and avoid midday work."
+        }
     },
-
     tubers: {
         name:     "Tubers & Roots",
-        examples: "cassava, yam, cocoyam, sweet potato, Irish potato",
+        examples: "cassava, yam, cocoyam, sweet potato",
         icon:     "🥔",
-        goodDay:      "Good conditions for tuber planting, mounding and weeding.",
-        badDay:       "Conditions not ideal for tubers. Hold off on planting or transplanting today.",
-        highHumidity: "Excess moisture risk: high humidity promotes tuber rot and bacterial blight. Check that ridges and mounds drain properly.",
-        highWind:     "Wind may topple yam stakes and trellises. Inspect and secure all supports.",
-        drought:      "Tubers need consistent soil moisture. Irrigate or apply mulch to retain water around roots.",
-        heatStress:   "Extreme heat can cause tuber cracking and poor bulking. Mulch the soil surface to keep roots cool.",
-        coldStress:   "Tubers prefer warm soils. Low temperatures significantly slow tuber formation and germination."
+        planting:   "Good conditions for tuber planting and mounding.",
+        harvesting: "Dry day is ideal for digging and harvesting tubers. Avoid harvesting in heavy rain.",
+        spraying:   "Good day to spray fungicides on yam and cocoyam foliage.",
+        irrigation: "Mulch and irrigate around tuber mounds to maintain soil moisture.",
+        warning:    {
+            highHumidity: "High humidity promotes tuber rot and bacterial blight. Check drainage on mounds.",
+            highWind:     "Wind may topple yam stakes. Inspect and secure all supports.",
+            drought:      "Tubers need consistent moisture. Irrigate or apply mulch to retain water.",
+            heat:         "Extreme heat causes tuber cracking. Mulch soil to keep roots cool."
+        }
     },
-
     legumes: {
         name:     "Legumes & Pulses",
-        examples: "beans, cowpea, soybeans, groundnut, sesame",
+        examples: "beans, cowpea, soybeans, groundnut",
         icon:     "🫘",
-        goodDay:      "Good conditions for legume growth, nitrogen fixation and pod filling.",
-        badDay:       "Legumes prefer moderate warmth and humidity — conditions are not ideal today.",
-        highHumidity: "High humidity increases pod and stem blight risk in legumes. Improve air circulation between rows.",
-        highWind:     "Wind can cause flower drop in beans and cowpea at flowering stage. Monitor closely.",
-        drought:      "Legumes are moderately drought-tolerant but need moisture at flowering. Irrigate if rainfall is absent.",
-        heatStress:   "Excessive heat causes flower abortion in beans and groundnut. Water during cooler hours.",
-        coldStress:   "Most Nigerian legumes are warm-season crops. Low temperatures will stunt growth significantly."
+        planting:   "Good moisture levels for legume planting and nodule formation.",
+        harvesting: "Dry conditions suit legume pod harvesting. Avoid picking wet pods.",
+        spraying:   "Good day to apply insecticide for pod borers and aphids on legumes.",
+        irrigation: "Irrigate at flowering stage — moisture stress now reduces pod set.",
+        warning:    {
+            highHumidity: "High humidity increases pod blight risk. Improve row spacing for airflow.",
+            highWind:     "Wind can cause flower drop in beans at flowering stage.",
+            drought:      "Drought at flowering stage drastically cuts legume yield.",
+            heat:         "Excessive heat causes flower abortion. Water during cooler hours."
+        }
     },
-
     vegetables: {
         name:     "Vegetables",
-        examples: "tomatoes, peppers, okra, onions, cabbage, cucumber, carrot",
+        examples: "tomatoes, peppers, okra, onions, cabbage, cucumber",
         icon:     "🍅",
-        goodDay:      "Good conditions for vegetable growth, transplanting and general farm work.",
-        badDay:       "Vegetables are sensitive to extremes — delay transplanting or outdoor work today.",
-        highHumidity: "High humidity is dangerous for vegetables: early blight, late blight and damping-off risk is high. Apply appropriate fungicide and improve drainage.",
-        highWind:     "Wind can snap vegetable stems and damage fruits. Stake tomatoes and peppers. Cover seedling beds.",
-        drought:      "Vegetables are high water-demand crops. Irrigate consistently — moisture stress quickly reduces yield and quality.",
-        heatStress:   "Heat stress causes blossom drop in tomatoes and peppers. Shade young plants and irrigate frequently.",
-        coldStress:   "Most Nigerian vegetables prefer warm conditions. Low temperatures will slow growth and cause wilting."
+        planting:   "Good conditions for vegetable transplanting and direct seeding.",
+        harvesting: "Dry day is best for picking vegetables. Wet produce spoils faster.",
+        spraying:   "Good day for fungicide and pesticide application on vegetables.",
+        irrigation: "Vegetables need consistent moisture. Irrigate deeply but avoid waterlogging.",
+        warning:    {
+            highHumidity: "High humidity: early blight and late blight risk is high. Apply fungicide immediately.",
+            highWind:     "Wind can snap tomato and pepper stems. Stake plants and cover seedling beds.",
+            drought:      "Moisture stress quickly reduces vegetable yield and quality.",
+            heat:         "Heat stress causes blossom drop in tomatoes. Shade and irrigate frequently."
+        }
     },
-
     plantains: {
         name:     "Plantains & Bananas",
         examples: "plantain, banana",
         icon:     "🍌",
-        goodDay:      "Good moisture and temperature conditions for plantain and banana growth.",
-        badDay:       "Conditions are not ideal for plantain work today. Avoid transplanting suckers.",
-        highHumidity: "High humidity significantly increases Black Sigatoka disease risk in plantain and banana. Monitor leaves and apply treatment early.",
-        highWind:     "Plantain and banana are extremely wind-sensitive. Strong wind can uproot entire plants or snap pseudostems. Prop up heavy bunches urgently.",
-        drought:      "Plantain and banana are very water-demanding. Water stress quickly reduces bunch size and fruit quality. Irrigate or mulch heavily.",
-        heatStress:   "High temperatures increase water demand in plantain. Ensure consistent irrigation and mulch around the base.",
-        coldStress:   "Plantain and banana are tropical crops. Even mild cold can cause leaf damage and slow bunch development."
+        planting:   "Good moisture conditions for planting plantain suckers.",
+        harvesting: "Good day for harvesting plantain bunches. Avoid harvesting in storms.",
+        spraying:   "Good day to apply fungicide against Black Sigatoka disease.",
+        irrigation: "Plantain is water-demanding. Mulch heavily around the base to retain moisture.",
+        warning:    {
+            highHumidity: "High humidity significantly increases Black Sigatoka disease risk. Treat promptly.",
+            highWind:     "Plantain is extremely wind-sensitive. Prop bunches and check for uprooting urgently.",
+            drought:      "Water stress quickly reduces bunch size. Irrigate and mulch heavily.",
+            heat:         "High temperatures increase water demand. Ensure consistent irrigation."
+        }
     },
-
     fruits: {
         name:     "Fruits & Orchards",
-        examples: "mango, citrus, pawpaw, pineapple, watermelon, pear",
+        examples: "mango, citrus, pawpaw, pineapple, watermelon",
         icon:     "🍊",
-        goodDay:      "Good conditions for fruit crop growth and orchard management.",
-        badDay:       "Not ideal for fruit crop activities today. Delay fertilizer application or pruning.",
-        highHumidity: "High humidity promotes fruit rot, anthracnose and fungal diseases in orchards. Ensure good spacing and air circulation between trees.",
-        highWind:     "Strong wind can cause premature fruit drop and physical damage to branches. Inspect orchard for broken limbs and support heavy-fruiting branches.",
-        drought:      "Fruit crops need consistent moisture especially during fruit set and development. Irrigate and mulch around tree bases.",
-        heatStress:   "Extreme heat causes sunscald on fruits and increases water stress. Irrigate frequently and avoid pruning in heat.",
-        coldStress:   "Most Nigerian fruit trees are tropical and will suffer leaf damage and reduced flowering in cold conditions."
+        planting:   "Good conditions for planting fruit seedlings and young trees.",
+        harvesting: "Dry conditions are ideal for harvesting fruits. Wet fruits bruise easily.",
+        spraying:   "Good day for orchard fungicide and insecticide application.",
+        irrigation: "Irrigate fruit trees deeply during dry periods especially at fruit set.",
+        warning:    {
+            highHumidity: "High humidity promotes fruit rot and anthracnose. Ensure good spacing.",
+            highWind:     "Strong wind causes premature fruit drop. Support heavy-fruiting branches.",
+            drought:      "Moisture stress during fruit development reduces yield and fruit size.",
+            heat:         "Extreme heat causes sunscald on fruits. Irrigate frequently."
+        }
     },
-
     cash_crops: {
         name:     "Cash Crops",
         examples: "cocoa, oil palm, rubber, cotton, sugarcane, ginger",
         icon:     "🌴",
-        goodDay:      "Good conditions for cash crop maintenance, planting and harvesting activities.",
-        badDay:       "Conditions are not ideal for cash crop field work today.",
-        highHumidity: "High humidity increases black pod disease risk in cocoa and fungal infections in ginger. Inspect crops and apply treatment as needed.",
-        highWind:     "Strong wind can damage cocoa pods and rubber tree branches. Check plantation for wind damage after storms.",
-        drought:      "Cash crops like sugarcane and cocoa have high water demands. Extended drought will significantly affect yield. Irrigate where possible.",
-        heatStress:   "Extreme heat reduces cocoa flowering and pod set. Maintain shade trees in cocoa plantations and irrigate ginger beds.",
-        coldStress:   "Cash crops like cocoa and oil palm are sensitive to cold. Low temperatures will reduce productivity and may cause leaf damage."
+        planting:   "Good conditions for cash crop planting and establishment.",
+        harvesting: "Good day for cocoa pod harvesting and oil palm bunch collection.",
+        spraying:   "Good day for fungicide application on cocoa and pesticide on cotton.",
+        irrigation: "Irrigate ginger and sugarcane beds during dry spells.",
+        warning:    {
+            highHumidity: "High humidity increases black pod disease in cocoa. Inspect and treat promptly.",
+            highWind:     "Strong wind can damage cocoa pods and rubber branches. Check plantation.",
+            drought:      "Extended drought will significantly reduce cash crop yield.",
+            heat:         "Extreme heat reduces cocoa flowering. Maintain shade trees."
+        }
     },
-
     herbs: {
         name:     "Herbs & Spices",
-        examples: "turmeric, garlic, basil, ginger, scent leaf",
+        examples: "ginger, turmeric, garlic, basil, scent leaf",
         icon:     "🌿",
-        goodDay:      "Good conditions for herb and spice crop growth and harvesting.",
-        badDay:       "Herbs prefer stable moderate conditions. Avoid transplanting or harvesting in these conditions.",
-        highHumidity: "High humidity promotes damping-off and root rot in herbs. Ensure containers and beds have excellent drainage.",
-        highWind:     "Wind can dry out and damage herb foliage quickly. Provide windbreaks or move potted herbs to shelter.",
-        drought:      "Most herbs need consistent but not excessive moisture. Water regularly and mulch to retain soil moisture.",
-        heatStress:   "Extreme heat causes bolting and reduced oil content in herbs. Provide partial shade and increase watering frequency.",
-        coldStress:   "Tropical herbs like ginger, turmeric and scent leaf are cold-sensitive. Protect from cold nights with covering or mulch."
+        planting:   "Good conditions for herb planting and transplanting.",
+        harvesting: "Dry day is best for harvesting herbs — essential oil content is highest.",
+        spraying:   "Good day for light pesticide or neem oil application on herbs.",
+        irrigation: "Water herbs consistently but ensure excellent drainage to avoid root rot.",
+        warning:    {
+            highHumidity: "High humidity promotes damping-off and root rot in herbs. Improve drainage.",
+            highWind:     "Wind dries out herb foliage quickly. Provide windbreaks or shelter.",
+            drought:      "Most herbs need consistent moisture. Water regularly and mulch.",
+            heat:         "Extreme heat causes bolting and reduces oil content. Provide shade."
+        }
     }
 }
 
-// ── General advice ──
-// Always shown — covers farmers who haven't set crop profiles
-// and provides a baseline for anyone growing something outside
-// the listed categories.
-const GENERAL_ADVICE = {
-    goodDay:      "Overall conditions look favorable for general farm work today.",
-    badDay:       "Conditions are not ideal for farming today. Consider postponing sensitive outdoor operations.",
-    highHumidity: "High humidity detected across the farm. Watch for fungal diseases and ensure drainage channels are clear.",
-    highWind:     "High wind speeds recorded. Secure farm structures, nets, stakes and young plants before wind picks up.",
-    drought:      "Low rainfall and moisture levels. Check all crops for stress signs and irrigate where possible.",
-    heatStress:   "Extreme heat warning. Schedule heavy farm work for early morning or late evening. Keep animals and workers hydrated.",
-    coldStress:   "Unusually low temperatures. Cover sensitive seedlings overnight and delay transplanting until temperatures recover."
+// ── General tips (always shown as baseline) ──
+const GENERAL_TIPS = {
+    planting:   "General conditions look suitable for planting and seedbed preparation.",
+    harvesting: "Conditions are suitable for general harvesting activities.",
+    spraying:   "Good conditions for pesticide and fertilizer application.",
+    irrigation: "Consider irrigating crops if soil moisture is low.",
+    warning: {
+        highHumidity: "High humidity detected. Watch for fungal diseases across all crops.",
+        highWind:     "High wind speeds. Secure farm structures, stakes and young plants.",
+        drought:      "Low moisture. Check all crops for stress and irrigate where possible.",
+        heat:         "Extreme heat. Schedule heavy farm work for early morning or late evening.",
+        cold:         "Unusually low temperatures. Cover sensitive seedlings overnight."
+    }
 }
 
 // ── Weather icon mapper ──
@@ -143,114 +161,137 @@ const getWeatherIcon = (weatherId) => {
     return "🌡"
 }
 
+// ── Evaluate which activities are recommended for a day ──
+const evaluateActivities = (weather, rules) => {
+    const { temp, rain, humidity, windSpeed } = weather
+    const p = rules.planting
+    const h = rules.harvesting
+    const s = rules.spraying
+    const i = rules.irrigation
+
+    return {
+        planting: (
+            rain     >= p.minRain     &&
+            humidity >= p.minHumidity &&
+            windSpeed <= p.maxWind    &&
+            temp     >= p.minTemp     &&
+            temp     <= p.maxTemp
+        ),
+        harvesting: (
+            rain     <= h.maxRain  &&
+            windSpeed <= h.maxWind &&
+            temp     >= h.minTemp  &&
+            temp     <= h.maxTemp
+        ),
+        spraying: (
+            rain     <= s.maxRain  &&
+            windSpeed <= s.maxWind &&
+            temp     <= s.maxTemp
+        ),
+        irrigation: (
+            rain <= i.maxRain &&
+            temp >= i.minTemp
+        )
+    }
+}
+
 // ── Main evaluation function ──
+// Returns full decision object for one day
 const evaluateDay = (weather, rules, cropCategories = []) => {
     const { temp, rain, humidity, windSpeed, weatherId } = weather
 
-    // ── 1. Score the day 0–100 ──
-    let score = 100
+    // which activities are recommended today
+    const activities = evaluateActivities(weather, rules)
 
-    if (rain < rules.minRain)                    score -= 25
-    if (rain > rules.alertRainThreshold)         score -= 20
-    if (humidity < rules.minHumidity)            score -= 20
-    if (humidity > 90)                           score -= 15
-    if (windSpeed > rules.maxWind)               score -= 20
-    if (windSpeed > rules.alertWindThreshold)    score -= 15
-    if (temp < rules.minTemp)                    score -= 20
-    if (temp > rules.maxTemp)                    score -= 20
-    if (temp > rules.alertTempHighThreshold)     score -= 15
+    // overall score — how many activities are possible (0–4)
+    const activityCount = Object.values(activities).filter(Boolean).length
 
-    score = Math.max(0, score)
+    // isGoodDay = at least planting OR harvesting is possible
+    const isGoodDay = activities.planting || activities.harvesting
 
-    // ── 2. Label based on score ──
-    const isGoodDay = score >= 50
+    // label based on activity count
     let label
-    if      (score >= 80) label = "Excellent Farming Day"
-    else if (score >= 60) label = "Good Farming Day"
-    else if (score >= 40) label = "Fair Conditions"
-    else if (score >= 20) label = "Poor Farming Day"
-    else                  label = "Avoid Farm Work"
+    if      (activityCount >= 3) label = "Excellent Farming Day"
+    else if (activityCount === 2) label = "Good Farming Day"
+    else if (activityCount === 1) label = "Limited Activities Today"
+    else                          label = "Poor Farming Day"
 
-    // ── 3. Detect which conditions are active ──
-    const isDrought   = rain < rules.minRain && humidity < rules.minHumidity
-    const isHighWind  = windSpeed > rules.maxWind
-    const isHeatStress = temp > rules.maxTemp
-    const isColdStress = temp < rules.minTemp
+    // ── Detect active conditions ──
     const isHighHumidity = humidity > 80
+    const isHighWind     = windSpeed > rules.planting.maxWind
+    const isDrought      = rain < rules.planting.minRain && humidity < rules.planting.minHumidity
+    const isHeatStress   = temp > rules.alertTempHighThreshold
+    const isColdStress   = temp < rules.planting.minTemp
 
-    // ── 4. Main recommendation ──
+    // ── Build recommended activities list for display ──
+    const recommendedActivities = []
+    if (activities.planting)   recommendedActivities.push({ key: "planting",   icon: "🌱", label: "Planting" })
+    if (activities.harvesting) recommendedActivities.push({ key: "harvesting", icon: "🌾", label: "Harvesting" })
+    if (activities.spraying)   recommendedActivities.push({ key: "spraying",   icon: "🧪", label: "Spraying" })
+    if (activities.irrigation) recommendedActivities.push({ key: "irrigation", icon: "💧", label: "Irrigation" })
+
+    // ── Main recommendation text ──
     let recommendation
-    if (isGoodDay) {
-        if (rain >= rules.minRain && humidity >= rules.minHumidity) {
-            recommendation = "Good moisture levels. Ideal for planting, transplanting and general field work."
-        } else if (isHighWind) {
-            recommendation = `Conditions are mostly good but wind is elevated (${Math.round(windSpeed)} km/h). Avoid spraying and transplanting delicate seedlings.`
-        } else {
-            recommendation = "Conditions are acceptable. A good day for general farm activities."
-        }
+    if (activityCount === 0) {
+        if (isHeatStress)      recommendation = `Extreme heat (${Math.round(temp)}°C). Avoid all heavy outdoor work. Water crops early morning or late evening.`
+        else if (rain > rules.alertRainThreshold) recommendation = `Heavy rain expected (${Math.round(rain)}%). Avoid field work — flooding risk.`
+        else if (isHighWind)   recommendation = `High wind (${Math.round(windSpeed)} km/h). Avoid spraying and working with young plants.`
+        else                   recommendation = "Conditions are poor for farming today. Rest and plan for a better day."
     } else {
-        if (isHeatStress) {
-            recommendation = `High temperature (${Math.round(temp)}°C). Avoid heavy outdoor work. Irrigate early morning or late evening.`
-        } else if (isColdStress) {
-            recommendation = `Low temperature (${Math.round(temp)}°C). Cold stress may damage crops. Delay planting and protect seedlings.`
-        } else if (isHighWind) {
-            recommendation = `High wind speeds (${Math.round(windSpeed)} km/h). Avoid spraying, transplanting and any work with young plants.`
-        } else if (isDrought) {
-            recommendation = "Low rain and humidity. Consider irrigation and apply mulch to retain soil moisture."
-        } else {
-            recommendation = "Conditions are not ideal today. Postpone sensitive farm operations where possible."
-        }
+        const actNames = recommendedActivities.map(a => a.label).join(", ")
+        recommendation = `Today is suitable for: ${actNames}.`
     }
 
-    // ── 5. Category-specific tips ──
+    // ── Category tips ──
     const categoryTips = []
 
-    // always add general advice first as a baseline
-    const generalTip = isGoodDay ? GENERAL_ADVICE.goodDay : GENERAL_ADVICE.badDay
-    categoryTips.push({ category: "General", icon: "🌱", tip: generalTip })
+    // general tip first
+    if (activityCount > 0) {
+        const actNames = recommendedActivities.map(a => `${a.icon} ${a.label}`).join(" · ")
+        categoryTips.push({ category: "Today's Activities", icon: "📋", tip: actNames })
+    }
 
-    // add condition-based general warnings
-    if (isHighHumidity) categoryTips.push({ category: "General", icon: "💧", tip: GENERAL_ADVICE.highHumidity })
-    if (isHighWind)     categoryTips.push({ category: "General", icon: "💨", tip: GENERAL_ADVICE.highWind })
-    if (isDrought)      categoryTips.push({ category: "General", icon: "☀️", tip: GENERAL_ADVICE.drought })
-    if (isHeatStress)   categoryTips.push({ category: "General", icon: "🌡", tip: GENERAL_ADVICE.heatStress })
-    if (isColdStress)   categoryTips.push({ category: "General", icon: "❄️", tip: GENERAL_ADVICE.coldStress })
+    // general warnings
+    if (isHighHumidity) categoryTips.push({ category: "General", icon: "💧", tip: GENERAL_TIPS.warning.highHumidity })
+    if (isHighWind)     categoryTips.push({ category: "General", icon: "💨", tip: GENERAL_TIPS.warning.highWind })
+    if (isDrought)      categoryTips.push({ category: "General", icon: "🏜️", tip: GENERAL_TIPS.warning.drought })
+    if (isHeatStress)   categoryTips.push({ category: "General", icon: "🌡", tip: GENERAL_TIPS.warning.heat })
+    if (isColdStress)   categoryTips.push({ category: "General", icon: "❄️", tip: GENERAL_TIPS.warning.cold })
 
-    // now add per-category tips for each category the farmer selected
+    // crop-specific tips per category
     cropCategories.forEach((cat) => {
-        const advice = CATEGORY_ADVICE[cat]
+        const advice = CATEGORY_TIPS[cat]
         if (!advice) return
 
-        // primary good/bad tip for this category
-        const primaryTip = isGoodDay ? advice.goodDay : advice.badDay
-        categoryTips.push({
-            category: advice.name,
-            icon:     advice.icon,
-            examples: advice.examples,
-            tip:      primaryTip
+        // show tip for each recommended activity
+        recommendedActivities.forEach((act) => {
+            if (advice[act.key]) {
+                categoryTips.push({
+                    category: advice.name,
+                    icon:     advice.icon,
+                    tip:      advice[act.key]
+                })
+            }
         })
 
-        // condition-specific warnings for this category
-        if (isHighHumidity && advice.highHumidity)
-            categoryTips.push({ category: advice.name, icon: "⚠️", tip: advice.highHumidity })
-        if (isHighWind && advice.highWind)
-            categoryTips.push({ category: advice.name, icon: "💨", tip: advice.highWind })
-        if (isDrought && advice.drought)
-            categoryTips.push({ category: advice.name, icon: "🏜️", tip: advice.drought })
-        if (isHeatStress && advice.heatStress)
-            categoryTips.push({ category: advice.name, icon: "🌡", tip: advice.heatStress })
-        if (isColdStress && advice.coldStress)
-            categoryTips.push({ category: advice.name, icon: "❄️", tip: advice.coldStress })
+        // warnings specific to this crop category
+        if (isHighHumidity && advice.warning.highHumidity)
+            categoryTips.push({ category: advice.name, icon: "⚠️", tip: advice.warning.highHumidity })
+        if (isHighWind && advice.warning.highWind)
+            categoryTips.push({ category: advice.name, icon: "💨", tip: advice.warning.highWind })
+        if (isDrought && advice.warning.drought)
+            categoryTips.push({ category: advice.name, icon: "🏜️", tip: advice.warning.drought })
+        if (isHeatStress && advice.warning.heat)
+            categoryTips.push({ category: advice.name, icon: "🌡", tip: advice.warning.heat })
     })
 
-    // ── 6. Alert check ──
-    // Separate from good/poor — fires only for genuinely dangerous conditions
+    // ── Alert check ──
     let alert = null
     if (rain > rules.alertRainThreshold) {
         alert = {
             type:     "flood",
             severity: "high",
-            message:  `Heavy rain expected (${Math.round(rain)}% chance). Risk of flooding and waterlogged soil. Protect harvested produce and check all drainage channels.`
+            message:  `Heavy rain expected (${Math.round(rain)}% chance). Flooding and waterlogged soil risk. Protect harvested produce and check drainage channels.`
         }
     } else if (windSpeed > rules.alertWindThreshold) {
         alert = {
@@ -269,8 +310,9 @@ const evaluateDay = (weather, rules, cropCategories = []) => {
     return {
         isGoodDay,
         label,
-        score,
+        score:                activityCount,
         recommendation,
+        recommendedActivities,
         categoryTips,
         alert,
         icon: getWeatherIcon(weatherId)

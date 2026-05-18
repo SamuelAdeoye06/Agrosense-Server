@@ -1,101 +1,50 @@
 const mongoose = require("mongoose")
 
-// There is only ever ONE active rules document for the whole platform.
-// Admins update it; all farmers are evaluated against the same thresholds.
-// We use a singleton pattern — upsert on a fixed documentId.
-
 const WeatherRuleSchema = new mongoose.Schema({
+    documentId: { type: String, default: "platform_rules", unique: true },
 
-    // fixed identifier so we always upsert the same doc
-    documentId: {
-        type: String,
-        default: "platform_rules",
-        unique: true
+    // ── Planting thresholds ──
+    planting: {
+        minRain:     { type: Number, default: 40,  min: 0, max: 100 },
+        minHumidity: { type: Number, default: 50,  min: 0, max: 100 },
+        maxWind:     { type: Number, default: 25,  min: 0, max: 120 },
+        minTemp:     { type: Number, default: 18,  min: 0, max: 50  },
+        maxTemp:     { type: Number, default: 35,  min: 0, max: 50  },
     },
 
-    // ── Thresholds ──
-    // These are the values admins control via the sliders
-
-    // minimum rain probability % for a "good" day
-    minRain: {
-        type: Number,
-        default: 40,
-        min: 0,
-        max: 100
+    // ── Harvesting thresholds ──
+    // Dry conditions — low rain, low wind so produce isn't damaged
+    harvesting: {
+        maxRain:     { type: Number, default: 20,  min: 0, max: 100 },
+        maxWind:     { type: Number, default: 20,  min: 0, max: 120 },
+        minTemp:     { type: Number, default: 18,  min: 0, max: 50  },
+        maxTemp:     { type: Number, default: 38,  min: 0, max: 50  },
     },
 
-    // minimum humidity % for a "good" day
-    minHumidity: {
-        type: Number,
-        default: 50,
-        min: 0,
-        max: 100
+    // ── Spraying thresholds (pesticides / fertilizer) ──
+    // No rain (washes chemicals away), low wind (drift risk), not too hot
+    spraying: {
+        maxRain:     { type: Number, default: 10,  min: 0, max: 100 },
+        maxWind:     { type: Number, default: 20,  min: 0, max: 120 },
+        maxTemp:     { type: Number, default: 35,  min: 0, max: 50  },
     },
 
-    // maximum wind speed km/h — above this is bad for most farming
-    maxWind: {
-        type: Number,
-        default: 25,
-        min: 0,
-        max: 120
+    // ── Irrigation thresholds ──
+    // Only needed when it's hot and dry
+    irrigation: {
+        maxRain:     { type: Number, default: 30,  min: 0, max: 100 },
+        minTemp:     { type: Number, default: 28,  min: 0, max: 50  },
     },
 
-    // temperature range for good farming
-    minTemp: {
-        type: Number,
-        default: 18,
-        min: 0,
-        max: 50
-    },
-    maxTemp: {
-        type: Number,
-        default: 35,
-        min: 0,
-        max: 50
-    },
+    // ── Alert thresholds (danger level — same for all activities) ──
+    alertRainThreshold:     { type: Number, default: 85, min: 0,  max: 100 },
+    alertWindThreshold:     { type: Number, default: 40, min: 0,  max: 120 },
+    alertTempHighThreshold: { type: Number, default: 38, min: 0,  max: 50  },
 
-    // ── Alert thresholds ──
-    // These trigger the warning card on the farmer dashboard
-    // separately from the good/poor day logic
+    lastUpdatedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "user", default: null },
+    lastUpdatedAt:  { type: Date, default: null }
 
-    // rain above this % triggers a flood/heavy rain alert
-    alertRainThreshold: {
-        type: Number,
-        default: 85,
-        min: 0,
-        max: 100
-    },
-
-    // wind above this km/h triggers a high wind alert
-    alertWindThreshold: {
-        type: Number,
-        default: 40,
-        min: 0,
-        max: 120
-    },
-
-    // temp above this triggers an extreme heat alert
-    alertTempHighThreshold: {
-        type: Number,
-        default: 38,
-        min: 0,
-        max: 50
-    },
-
-    // who last updated the rules and when
-    lastUpdatedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "user",
-        default: null
-    },
-    lastUpdatedAt: {
-        type: Date,
-        default: null
-    }
-
-}, {
-    timestamps: true
-})
+}, { timestamps: true })
 
 const WeatherRule = mongoose.model("weatherRule", WeatherRuleSchema)
 module.exports = WeatherRule

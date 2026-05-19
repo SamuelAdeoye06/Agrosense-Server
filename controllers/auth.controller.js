@@ -485,13 +485,17 @@ const changePassword = async (req, res) => {
     }
 }
 
-// Update crop profile
-const updateCropProfile = async (req, res) => {
+// Update profile
+const updateProfile = async (req, res) => {
     try {
-        const { cropProfiles } = req.body
+        const { cropProfiles, farmLocation } = req.body
+        const updateData = {}
+        if (cropProfiles !== undefined) updateData.cropProfiles = cropProfiles
+        if (farmLocation  !== undefined) updateData.farmLocation  = farmLocation
+
         const updated = await User.findByIdAndUpdate(
             req.user._id,
-            { cropProfiles },
+            updateData,
             { new: true }
         )
         res.status(200).json({ message: "Profile updated", user: updated })
@@ -499,4 +503,4 @@ const updateCropProfile = async (req, res) => {
         res.status(500).json({ message: "Failed to update profile" })
     }
 }
-module.exports = { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteAdmin, deleteFarmer, deleteSelf, toggleFarmerStatus, toggleAdminStatus,uploadAvatar, changePassword, updateCropProfile }
+module.exports = { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteAdmin, deleteFarmer, deleteSelf, toggleFarmerStatus, toggleAdminStatus,uploadAvatar, changePassword, updateProfile }

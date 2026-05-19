@@ -1,6 +1,6 @@
 const express = require("express")
 const router = express.Router()
-const { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteFarmer, deleteAdmin, deleteSelf,  toggleFarmerStatus, toggleAdminStatus, uploadAvatar, changePassword, updateCropProfile} = require("../controllers/auth.controller")
+const { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteFarmer, deleteAdmin, deleteSelf,  toggleFarmerStatus, toggleAdminStatus, uploadAvatar, changePassword, updateProfile} = require("../controllers/auth.controller")
 const { protect, superAdminOnly, adminOnly } = require("../middleware/auth.middleware")
 
 router.post("/register", register)
@@ -15,6 +15,6 @@ router.patch("/admin/farmers/:id/status", protect, adminOnly, toggleFarmerStatus
 router.patch("/admin/admins/:id/status", protect, superAdminOnly, toggleAdminStatus)
 router.post("/upload-avatar",   protect, uploadAvatar)
 router.patch("/change-password", protect, changePassword)
-router.patch("/update-profile", protect, updateCropProfile)
+router.patch("/update-profile", protect, updateProfile)
 
 module.exports = router

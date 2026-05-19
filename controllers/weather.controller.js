@@ -66,19 +66,23 @@ const formatDay = (dailyEntry, index) => {
 }
 
 // ── Format current weather ──
-const formatCurrent = (currentEntry) => {
+// We merge current conditions (actual temp, humidity, wind right now)
+// with today's daily rain probability since current has no pop field
+const formatCurrent = (currentEntry, todayDaily) => {
     const windKmh = Math.round((currentEntry.wind_speed || 0) * 3.6)
     return {
         temp:        Math.round(currentEntry.temp),
         feelsLike:   Math.round(currentEntry.feels_like),
         humidity:    currentEntry.humidity || 0,
         windSpeed:   windKmh,
-        rain:        0,   // current weather has no rain probability, only daily does
+        // use today's daily pop for rain probability — current has none
+        rain:        Math.round((todayDaily?.pop || 0) * 100),
         description: currentEntry.weather?.[0]?.description || "",
         weatherId:   currentEntry.weather?.[0]?.id || 800,
         icon:        getWeatherIcon(currentEntry.weather?.[0]?.id)
     }
 }
+
 
 // ── Get or create platform rules ──
 const getOrCreateRules = async () => {
@@ -112,7 +116,8 @@ const getForecast = async (req, res) => {
             const forecastWithDecisions = cache.forecast.map((day) =>
                 ({ ...day, ...evaluateDay(day, rules, crops) })
             )
-            const todayDecision = evaluateDay(cache.current, rules, crops)
+            // use forecast[0] (today's daily) for decisions — current has no rain probability
+            const todayDecision = evaluateDay(cache.forecast[0], rules, crops)
 
             return res.status(200).json({
                 message:   "Weather data retrieved (cached)",
@@ -136,14 +141,14 @@ const getForecast = async (req, res) => {
 
         const owmData          = await fetchForecast(lat, lon)
         const formattedForecast = owmData.daily.slice(0, 7).map((day, i) => formatDay(day, i))
-        const formattedCurrent  = formatCurrent(owmData.current)
+        const formattedCurrent  = formatCurrent(owmData.current, owmData.daily[0])
 
         // save to cache
         await User.findByIdAndUpdate(farmer._id, {
             weatherCache: {
                 fetchedAt: new Date(),
                 lat,
-                lon,
+                lon,    
                 forecast: formattedForecast,
                 current:  formattedCurrent
             }
@@ -201,13 +206,13 @@ const getTodayAlert = async (req, res) => {
         const farmer = await User.findById(req.user._id)
         const cache  = farmer.weatherCache
 
-        if (!cache?.current) {
+        if (!cache?.forecast?.[0]) {
             return res.status(200).json({ alert: null, message: "No weather data yet" })
         }
 
         const rules    = await getOrCreateRules()
         const crops    = farmer.cropProfiles || []
-        const decision = evaluateDay(cache.current, rules, crops)
+        const decision = evaluateDay(cache.forecast[0], rules, crops)
 
         res.status(200).json({
             alert:     decision.alert,

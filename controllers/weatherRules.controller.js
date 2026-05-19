@@ -1,4 +1,6 @@
 const WeatherRule = require("../models/weatherRule.model")
+const User        = require('../models/user.model')
+const sendMail    = require('../utils/sendMail')
 
 const getOrCreateRules = async () => {
     let rules = await WeatherRule.findOne({ documentId: "platform_rules" })
@@ -6,7 +8,6 @@ const getOrCreateRules = async () => {
     return rules
 }
 
-// ── Validate the nested rules object ──
 const validateRules = (data) => {
     const errors = []
     const { planting, harvesting, spraying, irrigation } = data
@@ -64,6 +65,42 @@ const saveRules = async (req, res) => {
         )
 
         res.status(200).json({ message: "Weather rules saved successfully", rules: updated })
+
+        // ── notify all admins of the rule change ──
+        const updatedAt = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        const updater   = await User.findById(req.user._id)
+        const allAdmins = await User.find({
+            role: { $in: ["admin", "super_admin"] },
+            status: "active"
+        })
+
+        await Promise.all(
+            allAdmins.map((admin) =>
+                sendMail({
+                    to: admin.email,
+                    subject: "Weather Rules Updated — AgroSense",
+                    template: "rules-updated.ejs",
+                    data: {
+                        name:                  admin.fullName,
+                        updatedBy:             updater.fullName,
+                        updatedAt,
+                        planting,
+                        harvesting,
+                        spraying,
+                        irrigation,
+                        alertRainThreshold,
+                        alertWindThreshold,
+                        alertTempHighThreshold
+                    }
+                })
+            )
+        )
+
     } catch (error) {
         console.error("Save rules error:", error.message)
         res.status(500).json({ message: "Server error saving weather rules" })

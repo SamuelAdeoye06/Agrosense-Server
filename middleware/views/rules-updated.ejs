@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Weather Rules Updated — AgroSense</title>
+</head>
+
+<body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,sans-serif;">
+
+  <div style="max-width:600px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;border:1px solid #dcefe3;">
+
+    <div style="background:linear-gradient(135deg,#1b4332,#2d6a4f);padding:30px;text-align:center;">
+      <h1 style="color:white;margin:0;">🌱 AgroSense</h1>
+      <p style="color:#d8f3dc;margin-top:10px;">Smart Farming Platform</p>
+    </div>
+
+    <div style="padding:40px 30px;">
+      <h2 style="color:#1b4332;">Weather Rules Updated ⚙️</h2>
+
+      <p style="color:#444;line-height:1.7;">
+        Hi <strong><%= name %></strong>, the platform weather thresholds have been updated by <strong><%= updatedBy %></strong> on <strong><%= updatedAt %></strong>.
+      </p>
+
+      <p style="color:#444;line-height:1.7;">The new thresholds are:</p>
+
+      <!-- Planting -->
+      <div style="margin-bottom:16px;">
+        <p style="color:#1b4332;font-weight:bold;margin:0 0 8px;">🌱 Planting</p>
+        <div style="background:#f0f7f4;border-radius:8px;padding:14px;font-size:13px;color:#444;line-height:1.8;">
+          Min Rain: <strong><%= planting.minRain %>%</strong> &nbsp;|&nbsp;
+          Min Humidity: <strong><%= planting.minHumidity %>%</strong> &nbsp;|&nbsp;
+          Max Wind: <strong><%= planting.maxWind %> km/h</strong> &nbsp;|&nbsp;
+          Temp: <strong><%= planting.minTemp %>°C – <%= planting.maxTemp %>°C</strong>
+        </div>
+      </div>
+
+      <!-- Harvesting -->
+      <div style="margin-bottom:16px;">
+        <p style="color:#1b4332;font-weight:bold;margin:0 0 8px;">🌾 Harvesting</p>
+        <div style="background:#f0f7f4;border-radius:8px;padding:14px;font-size:13px;color:#444;line-height:1.8;">
+          Max Rain: <strong><%= harvesting.maxRain %>%</strong> &nbsp;|&nbsp;
+          Max Wind: <strong><%= harvesting.maxWind %> km/h</strong> &nbsp;|&nbsp;
+          Temp: <strong><%= harvesting.minTemp %>°C – <%= harvesting.maxTemp %>°C</strong>
+        </div>
+      </div>
+
+      <!-- Spraying -->
+      <div style="margin-bottom:16px;">
+        <p style="color:#1b4332;font-weight:bold;margin:0 0 8px;">🧪 Spraying</p>
+        <div style="background:#f0f7f4;border-radius:8px;padding:14px;font-size:13px;color:#444;line-height:1.8;">
+          Max Rain: <strong><%= spraying.maxRain %>%</strong> &nbsp;|&nbsp;
+          Max Wind: <strong><%= spraying.maxWind %> km/h</strong> &nbsp;|&nbsp;
+          Max Temp: <strong><%= spraying.maxTemp %>°C</strong>
+        </div>
+      </div>
+
+      <!-- Irrigation -->
+      <div style="margin-bottom:16px;">
+        <p style="color:#1b4332;font-weight:bold;margin:0 0 8px;">💧 Irrigation</p>
+        <div style="background:#f0f7f4;border-radius:8px;padding:14px;font-size:13px;color:#444;line-height:1.8;">
+          Max Rain: <strong><%= irrigation.maxRain %>%</strong> &nbsp;|&nbsp;
+          Min Temp: <strong><%= irrigation.minTemp %>°C</strong>
+        </div>
+      </div>
+
+      <!-- Alert Thresholds -->
+      <div style="margin-bottom:16px;">
+        <p style="color:#991b1b;font-weight:bold;margin:0 0 8px;">⚠️ Alert Thresholds</p>
+        <div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:14px;font-size:13px;color:#444;line-height:1.8;">
+          Rain Alert: <strong><%= alertRainThreshold %>%</strong> &nbsp;|&nbsp;
+          Wind Alert: <strong><%= alertWindThreshold %> km/h</strong> &nbsp;|&nbsp;
+          Heat Alert: <strong><%= alertTempHighThreshold %>°C</strong>
+        </div>
+      </div>
+
+      <p style="color:#888;font-size:13px;line-height:1.6;margin-top:24px;">
+        These thresholds now govern all farmer recommendations and alerts across the platform.
+      </p>
+    </div>
+
+    <div style="background:#f0f7f4;padding:20px;text-align:center;font-size:13px;color:#666;">
+      AgroSense © 2026 • Smart Farming Platform
+    </div>
+    <p style="color:#888;font-size:12px;text-align:center;">
+      If this email landed in spam, please mark it as "Not Spam" to receive future updates.
+    </p>
+  </div>
+
+</body>
+</html>

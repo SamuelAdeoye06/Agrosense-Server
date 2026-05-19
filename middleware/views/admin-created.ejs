@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Your AgroSense Admin Account</title>
+</head>
+
+<body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,sans-serif;">
+
+  <div style="max-width:600px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;border:1px solid #dcefe3;">
+
+    <div style="background:linear-gradient(135deg,#1b4332,#2d6a4f);padding:30px;text-align:center;">
+      <h1 style="color:white;margin:0;">🌱 AgroSense</h1>
+      <p style="color:#d8f3dc;margin-top:10px;">
+        Smart Farming Platform
+      </p>
+    </div>
+
+    <div style="padding:40px 30px;">
+      <h2 style="color:#1b4332;">
+        Hello, <%= name %> 👋
+      </h2>
+
+      <p style="color:#444;line-height:1.7;">
+        A <strong>AgroSense Admin account</strong> has been created for you by <strong><%= createdBy %></strong>.
+      </p>
+
+      <p style="color:#444;line-height:1.7;">
+        You can now log in using the details below:
+      </p>
+
+      <div style="background:#f0f7f4;border:1px solid #b7dfc9;border-radius:8px;padding:20px;margin:24px 0;">
+        <p style="margin:0 0 10px;color:#444;"><strong>Email:</strong> <span style="color:#1b4332;"><%= email %></span></p>
+        <p style="margin:0;color:#444;"><strong>Password:</strong> Use the password provided to you by <%= createdBy %>.</p>
+      </div>
+
+      <p style="color:#888;font-size:13px;line-height:1.6;">
+        For security, please change your password immediately after your first login via your account settings.
+      </p>
+
+      <div style="margin-top:30px;text-align:center;">
+        <a
+          href="http://localhost:5173/admin/login"
+          style="
+            display:inline-block;
+            background:#2d6a4f;
+            color:white;
+            text-decoration:none;
+            padding:12px 24px;
+            border-radius:8px;
+            font-weight:bold;
+          "
+        >
+          Login to AgroSense
+        </a>
+      </div>
+
+      <p style="color:#444;line-height:1.7;margin-top:30px;">
+        As an admin you can:
+      </p>
+
+      <ul style="color:#444;line-height:1.8;">
+        <li>Manage farmer accounts</li>
+        <li>Configure weather rules and thresholds</li>
+        <li>Monitor platform activity</li>
+        <li>View farming insights across all users</li>
+      </ul>
+    </div>
+
+    <div style="background:#f0f7f4;padding:20px;text-align:center;font-size:13px;color:#666;">
+      AgroSense © 2026 • Smart Farming Platform
+    </div>
+
+    <p style="color:#888;font-size:12px;text-align:center;">
+      If this email landed in spam, please mark it as "Not Spam" to receive future updates.
+    </p>
+  </div>
+
+</body>
+</html>

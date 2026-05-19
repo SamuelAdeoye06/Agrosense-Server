@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>AgroSense Account Update</title>
+</head>
+
+<body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,sans-serif;">
+
+  <div style="max-width:600px;margin:40px auto;background:white;border-radius:12px;overflow:hidden;border:1px solid #dcefe3;">
+
+    <div style=`background:linear-gradient(135deg,<%= status === 'active' ? '#1b4332,#2d6a4f' : '#7f1d1d,#991b1b' %>);padding:30px;text-align:center;`>
+      <h1 style="color:white;margin:0;">🌱 AgroSense</h1>
+      <p style="color:#d8f3dc;margin-top:10px;">Smart Farming Platform</p>
+    </div>
+
+    <div style="padding:40px 30px;">
+      <h2 style=`color:<%= status === 'active' ? '#1b4332' : '#991b1b' %>;`>
+        <%= status === 'active' ? 'Your Account Has Been Reactivated ✅' : 'Your Account Has Been Deactivated ⚠️' %>
+      </h2>
+
+      <p style="color:#444;line-height:1.7;">
+        Hi <strong><%= name %></strong>,
+      </p>
+
+      <% if (status === 'active') { %>
+        <p style="color:#444;line-height:1.7;">
+          Your AgroSense farmer account has been <strong>reactivated</strong>. You can now log in and access all platform features as normal.
+        </p>
+        <div style="margin-top:30px;text-align:center;">
+            <a
+                href="http://localhost:5173/login"
+                style="display:inline-block;background:#2d6a4f;color:white;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;"
+            >
+                Login to AgroSense
+            </a>
+        </div>
+      <% } else { %>
+        <p style="color:#444;line-height:1.7;">
+          Your AgroSense farmer account has been <strong>deactivated</strong> by an administrator. You will not be able to log in until your account is reactivated.
+        </p>
+        <p style="color:#444;line-height:1.7;">
+          If you believe this is a mistake or need clarification, please reach out to our support team.
+        </p>
+        <div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:16px;margin:24px 0;text-align:center;">
+          <p style="margin:0;color:#991b1b;font-size:13px;">
+            Your account was deactivated on <strong><%= actionDate %></strong>
+          </p>
+        </div>
+      <% } %>
+    </div>
+
+    <div style="background:#f0f7f4;padding:20px;text-align:center;font-size:13px;color:#666;">
+      AgroSense © 2026 • Smart Farming Platform
+    </div>
+    <p style="color:#888;font-size:12px;text-align:center;">
+      If this email landed in spam, please mark it as "Not Spam" to receive future updates.
+    </p>
+  </div>
+
+</body>
+</html>

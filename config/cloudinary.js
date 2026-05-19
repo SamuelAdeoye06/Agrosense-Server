@@ -6,4 +6,7 @@ cloudinary.config({
     api_secret: process.env.CLOUD_SECRET
 })
 
+// temporary — remove after confirming
+// console.log("Cloudinary config:", cloudinary.config())
+
 module.exports = cloudinary

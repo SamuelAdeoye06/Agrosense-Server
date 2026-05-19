@@ -2,6 +2,7 @@ const User = require("../models/user.model")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const cloudinary = require("../config/cloudinary")
+const sendMail = require('../utils/sendMail')
 
 // reusable token generator
 const generateToken = (id, role) => {
@@ -15,7 +16,7 @@ const generateToken = (id, role) => {
 // ── Register ──
 const register = async (req, res) => {
     try {
-        const { fullName, email, password, farmLocation } = req.body
+        const { fullName, email, password, farmLocation, cropProfiles } = req.body
 
         if (!fullName || !email || !password) {
             return res.status(400).json({ message: "All required fields must be filled" })
@@ -45,6 +46,7 @@ const register = async (req, res) => {
             email,
             password: hashedPassword,
             farmLocation,
+            cropProfiles: cropProfiles || [],
         })
 
         const token = generateToken(user._id, user.role)
@@ -57,7 +59,18 @@ const register = async (req, res) => {
                 fullName: user.fullName,
                 email: user.email,
                 farmLocation: user.farmLocation,
-                role: user.role, avatarUrl: user.avatarUrl,
+                role: user.role, 
+                avatarUrl: user.avatarUrl,
+                cropProfiles: user.cropProfiles, 
+            }
+        })
+
+        await sendMail({
+            to: user.email,
+            subject: 'Welcome to AgroSense 🌱',
+            template: 'welcome.ejs',
+            data: {
+                name: user.fullName
             }
         })
 
@@ -76,7 +89,6 @@ const createAdmin = async (req, res) => {
             return res.status(400).json({ message: "All fields are required" })
         }
 
-        // regex validation for admin password too
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&_#])[A-Za-z\d@$!%*?&_#]{8,}$/
         if (!passwordRegex.test(password)) {
             return res.status(400).json({
@@ -107,6 +119,40 @@ const createAdmin = async (req, res) => {
                 email: admin.email,
                 role: admin.role,
                 avatarUrl: admin.avatarUrl,
+            }
+        })
+
+        // ── fetch the super admin who made this request ──
+        const superAdmin = await User.findById(req.user._id)
+
+        const createdAt = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        // Email to the new admin
+        await sendMail({
+            to: admin.email,
+            subject: 'Your AgroSense Admin Account Has Been Created',
+            template: 'admin-created.ejs',
+            data: {
+                name: admin.fullName,
+                email: admin.email,
+                createdBy: superAdmin.fullName
+            }
+        })
+
+        // Email to the super admin as confirmation
+        await sendMail({
+            to: superAdmin.email,
+            subject: 'Admin Account Created — AgroSense',
+            template: 'admin-created-superadmin-notify.ejs',
+            data: {
+                superAdminName: superAdmin.fullName,
+                newAdminName: admin.fullName,
+                newAdminEmail: admin.email,
+                createdAt
             }
         })
 
@@ -154,7 +200,9 @@ const login = async (req, res) => {
                 fullName: user.fullName,
                 email: user.email,
                 farmLocation: user.farmLocation,
-                role: user.role, avatarUrl: user.avatarUrl,
+                role: user.role, 
+                avatarUrl: user.avatarUrl,
+                cropProfiles: user.cropProfiles, 
             }
         })
 
@@ -199,52 +247,60 @@ const getAllAdmins = async (req, res) => {
   }
 }
 
-// ── Delete Farmer/User ──
 const deleteFarmer = async (req, res) => {
     try {
         const { id } = req.params
-
-        // logged in user
         const currentUser = req.user
 
-        // find target farmer
         const farmer = await User.findById(id)
 
         if (!farmer) {
-            return res.status(404).json({
-                message: "Farmer not found"
-            })
+            return res.status(404).json({ message: "Farmer not found" })
         }
 
-        // only farmer accounts can be deleted here
         if (farmer.role !== "farmer") {
-            return res.status(400).json({
-                message: "This account is not a farmer account"
-            })
+            return res.status(400).json({ message: "This account is not a farmer account" })
         }
-        
-        // if current user is farmer, ensure it's their own account
+
         if (
             currentUser.role === "farmer" &&
             currentUser._id.toString() !== farmer._id.toString()
         ) {
-            return res.status(403).json({
-                message: "You can only delete your own account"
-            })
+            return res.status(403).json({ message: "You can only delete your own account" })
         }
+
+        const actionDate = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        // ── capture details before deletion ──
+        const farmerName  = farmer.fullName
+        const farmerEmail = farmer.email
+        const isAdminDelete = currentUser.role !== "farmer"
 
         await User.findByIdAndDelete(id)
 
-        res.status(200).json({
-            message: "Farmer deleted successfully"
-        })
+        res.status(200).json({ message: "Farmer deleted successfully" })
+
+        // ── only email if an admin deleted them, not self-delete ──
+        if (isAdminDelete) {
+            await sendMail({
+                to: farmerEmail,
+                subject: "Your AgroSense Account Has Been Removed",
+                template: "farmer-deleted.ejs",
+                data: {
+                    name: farmerName,
+                    email: farmerEmail,
+                    actionDate
+                }
+            })
+        }
 
     } catch (error) {
         console.error("Delete farmer error:", error.message)
-
-        res.status(500).json({
-            message: "Server error deleting farmer"
-        })
+        res.status(500).json({ message: "Server error deleting farmer" })
     }
 }
 
@@ -257,44 +313,49 @@ const deleteAdmin = async (req, res) => {
         const admin = await User.findById(id)
 
         if (!admin) {
-            return res.status(404).json({
-                message: "Admin not found"
-            })
+            return res.status(404).json({ message: "Admin not found" })
         }
 
-        // prevent deleting super admin
         if (admin.role === "super_admin") {
-            return res.status(403).json({
-                message: "Super Admin account cannot be deleted"
-            })
+            return res.status(403).json({ message: "Super Admin account cannot be deleted" })
         }
 
-        // ensure target is actually admin
         if (admin.role !== "admin") {
-            return res.status(400).json({
-                message: "This account is not an admin"
-            })
+            return res.status(400).json({ message: "This account is not an admin" })
         }
 
-        // optional: prevent self delete
         if (req.user._id.toString() === admin._id.toString()) {
-            return res.status(400).json({
-                message: "You cannot delete your own admin account"
-            })
+            return res.status(400).json({ message: "You cannot delete your own admin account" })
         }
+
+        const actionDate = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        // ── capture before deletion ──
+        const adminName  = admin.fullName
+        const adminEmail = admin.email
 
         await User.findByIdAndDelete(id)
 
-        res.status(200).json({
-            message: "Admin deleted successfully"
+        res.status(200).json({ message: "Admin deleted successfully" })
+
+        await sendMail({
+            to: adminEmail,
+            subject: "Your AgroSense Admin Account Has Been Removed",
+            template: "admin-deleted.ejs",
+            data: {
+                name: adminName,
+                email: adminEmail,
+                actionDate
+            }
         })
 
     } catch (error) {
         console.error("Delete admin error:", error.message)
-
-        res.status(500).json({
-            message: "Server error deleting admin"
-        })
+        res.status(500).json({ message: "Server error deleting admin" })
     }
 }
 
@@ -323,7 +384,6 @@ const deleteSelf = async (req, res) => {
     }
 }
 
-// ── Toggle Farmer Status (Admin) ──
 const toggleFarmerStatus = async (req, res) => {
     try {
         const { id } = req.params
@@ -338,7 +398,6 @@ const toggleFarmerStatus = async (req, res) => {
             return res.status(400).json({ message: "This account is not a farmer" })
         }
 
-        // flip the status
         farmer.status = farmer.status === "active" ? "inactive" : "active"
         await farmer.save()
 
@@ -347,13 +406,32 @@ const toggleFarmerStatus = async (req, res) => {
             status: farmer.status
         })
 
+        const actionDate = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        await sendMail({
+            to: farmer.email,
+            subject: farmer.status === "active"
+                ? "Your AgroSense Account Has Been Reactivated"
+                : "Your AgroSense Account Has Been Deactivated",
+            template: "farmer-status.ejs",
+            data: {
+                name: farmer.fullName,
+                status: farmer.status,
+                actionDate
+            }
+        })
+
     } catch (error) {
         console.error("Toggle farmer status error:", error.message)
         res.status(500).json({ message: "Server error updating farmer status" })
     }
 }
 
-// ── Toggle Admin Status (Super Admin only) ──
+// toggle admin status
 const toggleAdminStatus = async (req, res) => {
     try {
         const { id } = req.params
@@ -364,7 +442,6 @@ const toggleAdminStatus = async (req, res) => {
             return res.status(404).json({ message: "Admin not found" })
         }
 
-        // prevent modifying super admin
         if (admin.role === "super_admin") {
             return res.status(403).json({ message: "Super Admin status cannot be changed" })
         }
@@ -373,13 +450,31 @@ const toggleAdminStatus = async (req, res) => {
             return res.status(400).json({ message: "This account is not an admin" })
         }
 
-        // flip the status
         admin.status = admin.status === "active" ? "inactive" : "active"
         await admin.save()
 
         res.status(200).json({
             message: `Admin ${admin.status === "active" ? "activated" : "deactivated"} successfully`,
             status: admin.status
+        })
+
+        const actionDate = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        await sendMail({
+            to: admin.email,
+            subject: admin.status === "active"
+                ? "Your AgroSense Admin Account Has Been Reactivated"
+                : "Your AgroSense Admin Account Has Been Deactivated",
+            template: "admin-status.ejs",
+            data: {
+                name: admin.fullName,
+                status: admin.status,
+                actionDate
+            }
         })
 
     } catch (error) {
@@ -397,30 +492,31 @@ const uploadAvatar = async (req, res) => {
             return res.status(400).json({ message: "No image provided" })
         }
 
+        // guard — ensure it's actually a base64 data URI
+        if (!profileImage.startsWith('data:image/')) {
+            return res.status(400).json({ message: "Invalid image format. Please upload a valid image." })
+        }
+
         const userId = req.user._id
 
-        // delete old avatar from cloudinary if it exists
         const currentUser = await User.findById(userId)
         if (currentUser.avatarPublicId) {
             try {
                 await cloudinary.uploader.destroy(currentUser.avatarPublicId)
             } catch (delErr) {
-                console.error("Failed to delete old avatar:", delErr.message)
-                // continue with upload even if deletion fails
+                console.error("Failed to delete old avatar:", delErr?.message || delErr)
             }
         }
 
-        // upload new image to cloudinary
         const result = await cloudinary.uploader.upload(profileImage, {
             folder: "agrosense/avatars",
-            timeout: 60000, // 60 seconds
+            timeout: 60000,
             transformation: [
                 { width: 400, height: 400, crop: "fill", gravity: "face" },
                 { quality: "auto" }
             ]
         })
 
-        // save secure_url and public_id to user
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             {
@@ -433,18 +529,21 @@ const uploadAvatar = async (req, res) => {
         res.status(200).json({
             message: "Profile picture updated successfully",
             user: {
-                id:           updatedUser._id,
-                fullName:     updatedUser.fullName,
-                email:        updatedUser.email,
-                farmLocation: updatedUser.farmLocation,
-                role:         updatedUser.role,
-                avatarUrl:    updatedUser.avatarUrl,
+                id:             updatedUser._id,
+                fullName:       updatedUser.fullName,
+                email:          updatedUser.email,
+                farmLocation:   updatedUser.farmLocation,
+                role:           updatedUser.role,
+                avatarUrl:      updatedUser.avatarUrl,
                 avatarPublicId: updatedUser.avatarPublicId,
+                cropProfiles:   updatedUser.cropProfiles,
             }
         })
 
     } catch (error) {
-        console.error("Upload avatar error:", error.message)
+        // Cloudinary sometimes throws a plain object, not an Error instance
+        const errMsg = error?.message || error?.error?.message || JSON.stringify(error)
+        console.error("Upload avatar error (full):", errMsg)
         res.status(500).json({ message: "Server error uploading avatar" })
     }
 }
@@ -465,7 +564,6 @@ const changePassword = async (req, res) => {
             })
         }
 
-        // get user with password
         const user = await User.findById(req.user._id).select("+password")
 
         const isMatch = await bcrypt.compare(currentPassword, user.password)
@@ -478,6 +576,23 @@ const changePassword = async (req, res) => {
         await user.save()
 
         res.status(200).json({ message: "Password changed successfully" })
+
+        const actionDate = new Date().toLocaleString("en-GB", {
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
+        })
+
+        await sendMail({
+            to: user.email,
+            subject: "Your AgroSense Password Has Been Changed",
+            template: "password-changed.ejs",
+            data: {
+                name: user.fullName,
+                email: user.email,
+                actionDate
+            }
+        })
 
     } catch (error) {
         console.error("Change password error:", error.message)
@@ -498,7 +613,18 @@ const updateProfile = async (req, res) => {
             updateData,
             { new: true }
         )
-        res.status(200).json({ message: "Profile updated", user: updated })
+        res.status(200).json({ 
+            message: "Profile updated", 
+            user: {
+                id:           updated._id,
+                fullName:     updated.fullName,
+                email:        updated.email,
+                farmLocation: updated.farmLocation,
+                role:         updated.role,
+                avatarUrl:    updated.avatarUrl,
+                cropProfiles: updated.cropProfiles,
+            }
+        })
     } catch (error) {
         res.status(500).json({ message: "Failed to update profile" })
     }

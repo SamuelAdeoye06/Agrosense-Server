@@ -6,11 +6,8 @@ const sendMail = require('../utils/sendMail')
 
 // reusable token generator
 const generateToken = (id, role) => {
-    return jwt.sign(
-        { id, role },
-        process.env.JWT_SECRET,
-        { expiresIn: "7d" }
-    )
+    const expiry = (role === 'admin' || role === 'super_admin') ? '4h' : '7d'
+    return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: expiry })
 }
 
 // ── Register ──
@@ -603,10 +600,11 @@ const changePassword = async (req, res) => {
 // Update profile
 const updateProfile = async (req, res) => {
     try {
-        const { cropProfiles, farmLocation } = req.body
+        const { cropProfiles, farmLocation, fullName } = req.body
         const updateData = {}
         if (cropProfiles !== undefined) updateData.cropProfiles = cropProfiles
         if (farmLocation  !== undefined) updateData.farmLocation  = farmLocation
+        if (fullName      !== undefined) updateData.fullName      = fullName  // ✅
 
         const updated = await User.findByIdAndUpdate(
             req.user._id,
@@ -614,7 +612,7 @@ const updateProfile = async (req, res) => {
             { new: true }
         )
         res.status(200).json({ 
-            message: "Profile updated", 
+            message: "Profile updated",
             user: {
                 id:           updated._id,
                 fullName:     updated.fullName,

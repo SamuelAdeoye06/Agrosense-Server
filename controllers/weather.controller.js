@@ -41,18 +41,23 @@ const fetchForecast = async (lat, lon) => {
 
 // ── Format one OWM daily entry into our shape ──
 const formatDay = (dailyEntry, index) => {
-    const windKmh      = Math.round((dailyEntry.wind_speed || 0) * 3.6)
-    const rainPercent  = Math.round((dailyEntry.pop || 0) * 100)
-    const date         = new Date(dailyEntry.dt * 1000)
-    const dayNames     = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
-    const shortNames   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
-    const dateString   = date.toISOString().split("T")[0]
+    const windKmh     = Math.round((dailyEntry.wind_speed || 0) * 3.6)
+    const rainPercent = Math.round((dailyEntry.pop || 0) * 100)
+    const date        = new Date(dailyEntry.dt * 1000)
+
+    const dayNames   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+    const shortNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+
+    // ── use Nigeria timezone (UTC+1) for correct day label and date string ──
+    const nigeriaDate = new Date(dailyEntry.dt * 1000 + (60 * 60 * 1000)) // shift +1hr
+    const dateString  = nigeriaDate.toISOString().split("T")[0]
+    const dayIndex    = nigeriaDate.getUTCDay()
 
     return {
         index,
         date:        dateString,
-        dayLabel:    dayNames[date.getDay()],
-        dayShort:    shortNames[date.getDay()],
+        dayLabel:    dayNames[dayIndex],
+        dayShort:    shortNames[dayIndex],
         temp:        Math.round(dailyEntry.temp.day),
         tempMin:     Math.round(dailyEntry.temp.min),
         tempMax:     Math.round(dailyEntry.temp.max),

@@ -3,6 +3,9 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const cloudinary = require("../config/cloudinary")
 const sendMail = require('../utils/sendMail')
+const SavedDate = require('../models/savedDate.model')
+const { generateOTP, verifyOTP } = require('../utils/otp')
+
 
 // reusable token generator
 const generateToken = (id, role) => {
@@ -277,6 +280,8 @@ const deleteFarmer = async (req, res) => {
         const farmerEmail = farmer.email
         const isAdminDelete = currentUser.role !== "farmer"
 
+        // ── delete saved dates first ──
+        await SavedDate.deleteMany({ farmerId: farmer._id })
         await User.findByIdAndDelete(id)
 
         res.status(200).json({ message: "Farmer deleted successfully" })
@@ -367,17 +372,15 @@ const deleteSelf = async (req, res) => {
             })
         }
 
+        // ── delete saved dates first ──
+        await SavedDate.deleteMany({ farmerId: user._id })
         await User.findByIdAndDelete(user._id)
 
-        res.status(200).json({
-            message: "Account deleted successfully"
-        })
+        res.status(200).json({ message: "Account deleted successfully" })
 
     } catch (error) {
         console.error("Delete self error:", error.message)
-        res.status(500).json({
-            message: "Server error deleting account"
-        })
+        res.status(500).json({ message: "Server error deleting account" })
     }
 }
 
@@ -627,4 +630,173 @@ const updateProfile = async (req, res) => {
         res.status(500).json({ message: "Failed to update profile" })
     }
 }
-module.exports = { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteAdmin, deleteFarmer, deleteSelf, toggleFarmerStatus, toggleAdminStatus,uploadAvatar, changePassword, updateProfile }
+// ── Send OTP (for delete account confirmation) ──
+const sendOTP = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id)
+        const { plain, hashed } = await generateOTP()
+
+        user.otp       = hashed
+        user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 mins
+        await user.save()
+
+        await sendMail({
+            to:       user.email,
+            subject:  'Your AgroSense Account Deletion OTP',
+            template: 'otp.ejs',
+            data: {
+                name:    user.fullName,
+                otp:     plain,
+                purpose: 'delete'
+            }
+        })
+
+        res.status(200).json({ message: 'OTP sent to your email' })
+
+    } catch (error) {
+        console.error('Send OTP error:', error.message)
+        res.status(500).json({ message: 'Server error sending OTP' })
+    }
+}
+
+// ── Verify OTP + Delete Account ──
+const verifyOTPAndDelete = async (req, res) => {
+    try {
+        const { otp } = req.body
+        const user    = await User.findById(req.user._id).select('+otp +otpExpiry')
+
+        if (!user.otp || !user.otpExpiry) {
+            return res.status(400).json({ message: 'No OTP found. Please request a new one.' })
+        }
+
+        if (new Date() > user.otpExpiry) {
+            user.otp = null; user.otpExpiry = null
+            await user.save()
+            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' })
+        }
+
+        const isValid = await verifyOTP(String(otp), String(user.otp))
+        if (!isValid) {
+            return res.status(400).json({ message: 'Invalid OTP. Please try again.' })
+        }
+
+        await SavedDate.deleteMany({ farmerId: user._id })
+        await User.findByIdAndDelete(user._id)
+
+        res.status(200).json({ message: 'Account deleted successfully' })
+
+    } catch (error) {
+        console.error('Verify OTP delete error:', error.message)
+        res.status(500).json({ message: 'Server error verifying OTP' })
+    }
+}
+
+// ── Forgot Password — Step 1: send OTP ──
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body
+        const user      = await User.findOne({ email })
+
+        // always return 200 so we don't reveal if email exists
+        if (!user) {
+            return res.status(200).json({ message: 'If that email exists, an OTP has been sent.' })
+        }
+
+        const { plain, hashed } = await generateOTP()
+        user.otp       = hashed
+        user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000)
+        await user.save()
+
+        await sendMail({
+            to:       user.email,
+            subject:  'Reset Your AgroSense Password',
+            template: 'otp.ejs',
+            data: {
+                name:    user.fullName,
+                otp:     plain,
+                purpose: 'reset'
+            }
+        })
+
+        res.status(200).json({ message: 'If that email exists, an OTP has been sent.' })
+
+    } catch (error) {
+        console.error('Forgot password error:', error.message)
+        res.status(500).json({ message: 'Server error' })
+    }
+}
+
+// ── Forgot Password — Step 2: verify OTP ──
+const verifyForgotPasswordOTP = async (req, res) => {
+    try {
+        const { email, otp } = req.body
+        const user           = await User.findOne({ email })
+
+        if (!user || !user.otp || !user.otpExpiry) {
+            return res.status(400).json({ message: 'Invalid or expired OTP.' })
+        }
+
+        if (new Date() > user.otpExpiry) {
+            user.otp = null; user.otpExpiry = null
+            await user.save()
+            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' })
+        }
+
+        const isValid = await verifyOTP(String(otp), String(user.otp))
+        if (!isValid) {
+            return res.status(400).json({ message: 'Invalid OTP. Please try again.' })
+        }
+
+        // OTP valid — clear it and signal frontend to show reset form
+        user.otp = null; user.otpExpiry = null
+        await user.save()
+
+        res.status(200).json({ message: 'OTP verified', email })
+
+    } catch (error) {
+        console.error('Verify forgot password OTP error:', error.message)
+        res.status(500).json({ message: 'Server error' })
+    }
+}
+
+// ── Forgot Password — Step 3: set new password ──
+const resetPassword = async (req, res) => {
+    try {
+        const { email, newPassword } = req.body
+
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&_#])[A-Za-z\d@$!%*?&_#]{8,}$/
+        if (!passwordRegex.test(newPassword)) {
+            return res.status(400).json({
+                message: 'Password must be at least 8 characters with uppercase, lowercase, number and special character'
+            })
+        }
+
+        const user = await User.findOne({ email })
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' })
+        }
+
+        const salt     = await bcrypt.genSalt(10)
+        user.password  = await bcrypt.hash(newPassword, salt)
+        await user.save()
+
+        res.status(200).json({ message: 'Password reset successfully' })
+
+        const actionDate = new Date().toLocaleString("en-GB", {
+            dateStyle: "full", timeStyle: "short", timeZone: "Africa/Lagos"
+        })
+
+        await sendMail({
+            to:       user.email,
+            subject:  'Your AgroSense Password Has Been Reset',
+            template: 'password-changed.ejs',
+            data: { name: user.fullName, email: user.email, actionDate }
+        })
+
+    } catch (error) {
+        console.error('Reset password error:', error.message)
+        res.status(500).json({ message: 'Server error' })
+    }
+}
+
+module.exports = { register, login, createAdmin, getAllFarmers, getAllAdmins, deleteAdmin, deleteFarmer, deleteSelf, toggleFarmerStatus, toggleAdminStatus,uploadAvatar, changePassword, updateProfile, sendOTP, verifyOTPAndDelete, forgotPassword, verifyForgotPasswordOTP, resetPassword }

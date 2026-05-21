@@ -31,12 +31,113 @@ const fetchForecast = async (lat, lon) => {
         params: {
             lat,
             lon,
-            exclude: "minutely,hourly,alerts",
+            exclude: "minutely,alerts",
             units:   "metric",
             appid:   OWM_KEY
         }
     })
     return response.data
+}
+
+// ── Helper to analyze timing of rain, wind, and temp anomalies from OWM hourly forecasts ──
+const analyzeHourlyTiming = (hourlyEntries, dateString, rules) => {
+    if (!hourlyEntries || hourlyEntries.length === 0) return { rain: 'none', wind: 'none', temp: 'none' }
+
+    // Filter hourly entries that match this day's date string (e.g. '2026-05-21') in Nigeria timezone (UTC+1)
+    const dailyHours = hourlyEntries.filter(hour => {
+        const nigeriaDate = new Date((hour.dt + 3600) * 1000) // shift by 1 hour
+        const ymd = nigeriaDate.toISOString().split("T")[0]
+        return ymd === dateString
+    })
+
+    if (dailyHours.length === 0) return { rain: 'none', wind: 'none', temp: 'none' }
+
+    // We split into Daytime (06:00 to 18:00 Nigeria Time) and Nighttime (18:00 to 06:00 Nigeria Time)
+    let daytimeRainProbSum = 0, daytimeHoursCount = 0
+    let nighttimeRainProbSum = 0, nighttimeHoursCount = 0
+
+    let daytimeWindMax = 0, nighttimeWindMax = 0
+    let daytimeTempMax = 0, nighttimeTempMax = 0
+
+    dailyHours.forEach(hour => {
+        const nigeriaDate = new Date((hour.dt + 3600) * 1000)
+        const hourOfDay = nigeriaDate.getUTCHours()
+
+        const pop = hour.pop || 0
+        const windKmh = Math.round((hour.wind_speed || 0) * 3.6)
+        const temp = hour.temp || 0
+
+        if (hourOfDay >= 6 && hourOfDay < 18) {
+            daytimeRainProbSum += pop
+            daytimeHoursCount++
+            if (windKmh > daytimeWindMax) daytimeWindMax = windKmh
+            if (temp > daytimeTempMax) daytimeTempMax = temp
+        } else {
+            nighttimeRainProbSum += pop
+            nighttimeHoursCount++
+            if (windKmh > nighttimeWindMax) nighttimeWindMax = windKmh
+            if (temp > nighttimeTempMax) nighttimeTempMax = temp
+        }
+    })
+
+    const avgDaytimePop = daytimeHoursCount > 0 ? (daytimeRainProbSum / daytimeHoursCount) : 0
+    const avgNighttimePop = nighttimeHoursCount > 0 ? (nighttimeRainProbSum / nighttimeHoursCount) : 0
+
+    // ── 1. Rain Timing ──
+    let rain = 'none'
+    if (avgDaytimePop >= 0.2 || avgNighttimePop >= 0.2) {
+        if (avgNighttimePop >= 0.45 && avgDaytimePop < 0.3) {
+            rain = 'night'
+        } else if (avgDaytimePop >= 0.45 && avgNighttimePop < 0.3) {
+            // Check morning vs afternoon
+            let morningRainSum = 0, morningCount = 0
+            let afternoonRainSum = 0, afternoonCount = 0
+            dailyHours.forEach(hour => {
+                const nigeriaDate = new Date((hour.dt + 3600) * 1000)
+                const hourOfDay = nigeriaDate.getUTCHours()
+                const pop = hour.pop || 0
+                if (hourOfDay >= 6 && hourOfDay < 12) {
+                    morningRainSum += pop
+                    morningCount++
+                } else if (hourOfDay >= 12 && hourOfDay < 18) {
+                    afternoonRainSum += pop
+                    afternoonCount++
+                }
+            })
+            const avgMorn = morningCount > 0 ? (morningRainSum / morningCount) : 0
+            const avgAft = afternoonCount > 0 ? (afternoonRainSum / afternoonCount) : 0
+
+            if (avgMorn >= 0.45 && avgAft < 0.3) rain = 'morning'
+            else if (avgAft >= 0.45 && avgMorn < 0.3) rain = 'afternoon'
+            else rain = 'daytime'
+        } else {
+            rain = 'intermittent'
+        }
+    }
+
+    // ── 2. Wind Timing ──
+    let wind = 'none'
+    const windThreshold = rules?.alertWindThreshold ?? 40
+    const isDayWindHigh = daytimeWindMax > windThreshold
+    const isNightWindHigh = nighttimeWindMax > windThreshold
+    if (isDayWindHigh || isNightWindHigh) {
+        if (isDayWindHigh && isNightWindHigh) wind = 'intermittent'
+        else if (isNightWindHigh) wind = 'night'
+        else wind = 'daytime'
+    }
+
+    // ── 3. Temp/Heat Timing ──
+    let tempTiming = 'none'
+    const tempThreshold = rules?.alertTempHighThreshold ?? 38
+    const isDayTempHigh = daytimeTempMax > tempThreshold
+    const isNightTempHigh = nighttimeTempMax > tempThreshold
+    if (isDayTempHigh || isNightTempHigh) {
+        if (isDayTempHigh && isNightTempHigh) tempTiming = 'intermittent'
+        else if (isNightTempHigh) tempTiming = 'night'
+        else tempTiming = 'afternoon'
+    }
+
+    return { rain, wind, temp: tempTiming }
 }
 
 // ── Format one OWM daily entry into our shape ──
@@ -128,7 +229,13 @@ const getForecast = async (req, res) => {
                 message:   "Weather data retrieved (cached)",
                 cached:    true,
                 location:  farmer.farmLocation,
-                current:   { ...cache.current, ...todayDecision },
+                current: {
+                    ...cache.current,
+                    ...todayDecision,
+                    rainTiming: cache.forecast[0]?.rainTiming || 'none',  // ✅ add this
+                    windTiming: cache.forecast[0]?.windTiming || 'none',  // ✅ add this
+                    tempTiming: cache.forecast[0]?.tempTiming || 'none',  // ✅ add this
+                },
                 forecast:  forecastWithDecisions,
                 fetchedAt: cache.fetchedAt
             })
@@ -144,8 +251,21 @@ const getForecast = async (req, res) => {
             lon = geo.lon
         }
 
-        const owmData          = await fetchForecast(lat, lon)
-        const formattedForecast = owmData.daily.slice(0, 7).map((day, i) => formatDay(day, i))
+                const owmData          = await fetchForecast(lat, lon)
+        const formattedForecast = owmData.daily.slice(0, 7).map((day, i) => {
+            const formatted = formatDay(day, i)
+            if (i <= 1 && owmData.hourly) {
+                const timings = analyzeHourlyTiming(owmData.hourly, formatted.date, rules)
+                formatted.rainTiming = timings.rain
+                formatted.windTiming = timings.wind
+                formatted.tempTiming = timings.temp
+            } else {
+                formatted.rainTiming = 'none'
+                formatted.windTiming = 'none'
+                formatted.tempTiming = 'none'
+            }
+            return formatted
+        })
         const formattedCurrent  = formatCurrent(owmData.current, owmData.daily[0])
 
         // save to cache
@@ -162,7 +282,12 @@ const getForecast = async (req, res) => {
         const forecastWithDecisions = formattedForecast.map((day) =>
             ({ ...day, ...evaluateDay(day, rules, crops) })
         )
-        const todayDecision = evaluateDay(formattedCurrent, rules, crops)
+        const todayDecision = evaluateDay({
+            ...formattedCurrent,
+            rainTiming: formattedForecast[0].rainTiming,
+            windTiming: formattedForecast[0].windTiming,
+            tempTiming: formattedForecast[0].tempTiming
+        }, rules, crops)
 
         return res.status(200).json({
             message:   "Weather data retrieved (fresh)",

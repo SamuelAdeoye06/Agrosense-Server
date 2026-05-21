@@ -638,6 +638,7 @@ const sendOTP = async (req, res) => {
 
         user.otp       = hashed
         user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 mins
+        user.otpAttempts  = 0 
         await user.save()
 
         await sendMail({
@@ -663,31 +664,89 @@ const sendOTP = async (req, res) => {
 const verifyOTPAndDelete = async (req, res) => {
     try {
         const { otp } = req.body
-        const user    = await User.findById(req.user._id).select('+otp +otpExpiry')
+
+        const user = await User.findById(req.user._id)
+            .select('+otp +otpExpiry +otpAttempts')
 
         if (!user.otp || !user.otpExpiry) {
-            return res.status(400).json({ message: 'No OTP found. Please request a new one.' })
+            return res.status(400).json({
+                message: 'No OTP found. Please request a new one.'
+            })
         }
 
+        // ── OTP expired ──
         if (new Date() > user.otpExpiry) {
-            user.otp = null; user.otpExpiry = null
+            user.otp = null
+            user.otpExpiry = null
+            user.otpAttempts = 0
+
             await user.save()
-            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' })
+
+            return res.status(400).json({
+                message: 'OTP has expired. Please request a new one.'
+            })
         }
 
-        const isValid = await verifyOTP(String(otp), String(user.otp))
+        // ── Too many attempts ──
+        if (user.otpAttempts >= 5) {
+            user.otp = null
+            user.otpExpiry = null
+            user.otpAttempts = 0
+
+            await user.save()
+
+            return res.status(400).json({
+                message: 'Too many failed attempts. Please request a new OTP.'
+            })
+        }
+
+        const isValid = await verifyOTP(
+            String(otp),
+            String(user.otp)
+        )
+
+        // ── Invalid OTP ──
         if (!isValid) {
-            return res.status(400).json({ message: 'Invalid OTP. Please try again.' })
+            user.otpAttempts += 1
+
+            await user.save()
+
+            const remaining = 5 - user.otpAttempts
+
+            return res.status(400).json({
+                message:
+                    remaining > 0
+                        ? `Invalid OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+                        : 'Too many failed attempts. Please request a new OTP.'
+            })
         }
 
-        await SavedDate.deleteMany({ farmerId: user._id })
+        // ── OTP valid ──
+        user.otpAttempts = 0
+        user.otp = null
+        user.otpExpiry = null
+
+        await user.save()
+
+        await SavedDate.deleteMany({
+            farmerId: user._id
+        })
+
         await User.findByIdAndDelete(user._id)
 
-        res.status(200).json({ message: 'Account deleted successfully' })
+        res.status(200).json({
+            message: 'Account deleted successfully'
+        })
 
     } catch (error) {
-        console.error('Verify OTP delete error:', error.message)
-        res.status(500).json({ message: 'Server error verifying OTP' })
+        console.error(
+            'Verify OTP delete error:',
+            error.message
+        )
+
+        res.status(500).json({
+            message: 'Server error verifying OTP'
+        })
     }
 }
 
@@ -705,6 +764,7 @@ const forgotPassword = async (req, res) => {
         const { plain, hashed } = await generateOTP()
         user.otp       = hashed
         user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000)
+        user.otpAttempts  = 0 
         await user.save()
 
         await sendMail({
@@ -730,32 +790,84 @@ const forgotPassword = async (req, res) => {
 const verifyForgotPasswordOTP = async (req, res) => {
     try {
         const { email, otp } = req.body
-        const user           = await User.findOne({ email })
+
+        const user = await User.findOne({ email })
+            .select('+otp +otpExpiry +otpAttempts')
 
         if (!user || !user.otp || !user.otpExpiry) {
-            return res.status(400).json({ message: 'Invalid or expired OTP.' })
+            return res.status(400).json({
+                message: 'Invalid or expired OTP.'
+            })
         }
 
+        // ── OTP expired ──
         if (new Date() > user.otpExpiry) {
-            user.otp = null; user.otpExpiry = null
+            user.otp = null
+            user.otpExpiry = null
+            user.otpAttempts = 0
+
             await user.save()
-            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' })
+
+            return res.status(400).json({
+                message: 'OTP has expired. Please request a new one.'
+            })
         }
 
-        const isValid = await verifyOTP(String(otp), String(user.otp))
+        // ── Too many attempts ──
+        if (user.otpAttempts >= 5) {
+            user.otp = null
+            user.otpExpiry = null
+            user.otpAttempts = 0
+
+            await user.save()
+
+            return res.status(400).json({
+                message: 'Too many failed attempts. Please request a new OTP.'
+            })
+        }
+
+        const isValid = await verifyOTP(
+            String(otp),
+            String(user.otp)
+        )
+
+        // ── Invalid OTP ──
         if (!isValid) {
-            return res.status(400).json({ message: 'Invalid OTP. Please try again.' })
+            user.otpAttempts += 1
+
+            await user.save()
+
+            const remaining = 5 - user.otpAttempts
+
+            return res.status(400).json({
+                message:
+                    remaining > 0
+                        ? `Invalid OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+                        : 'Too many failed attempts. Please request a new OTP.'
+            })
         }
 
-        // OTP valid — clear it and signal frontend to show reset form
-        user.otp = null; user.otpExpiry = null
+        // ── OTP valid ──
+        user.otpAttempts = 0
+        user.otp = null
+        user.otpExpiry = null
+
         await user.save()
 
-        res.status(200).json({ message: 'OTP verified', email })
+        res.status(200).json({
+            message: 'OTP verified',
+            email
+        })
 
     } catch (error) {
-        console.error('Verify forgot password OTP error:', error.message)
-        res.status(500).json({ message: 'Server error' })
+        console.error(
+            'Verify forgot password OTP error:',
+            error.message
+        )
+
+        res.status(500).json({
+            message: 'Server error'
+        })
     }
 }
 

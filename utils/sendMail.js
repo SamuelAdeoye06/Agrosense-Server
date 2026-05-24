@@ -25,6 +25,7 @@ const sendMail = async ({
 
     } catch (error) {
         console.error('Send mail error:', error)
+        throw error
     }
 }
 

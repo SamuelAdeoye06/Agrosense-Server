@@ -1,5 +1,9 @@
 const nodemailer = require('nodemailer')
 
+if (!process.env.APP_MAIL || !process.env.APP_PASS) {
+    console.error('Mail configuration error: APP_MAIL and APP_PASS are required')
+}
+
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {

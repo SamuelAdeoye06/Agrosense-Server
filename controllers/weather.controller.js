@@ -2,6 +2,7 @@ const axios       = require("axios")
 const User        = require("../models/user.model")
 const WeatherRule = require("../models/weatherRule.model")
 const { evaluateDay, getWeatherIcon } = require("../utils/decisionEngine")
+const sendMail = require('../utils/sendMail')
 
 const OWM_KEY     = process.env.OPENWEATHER_API_KEY
 const CACHE_HOURS = 3
@@ -16,7 +17,8 @@ const isCacheFresh = (fetchedAt) => {
 // ── Geocode location string → { lat, lon } ──
 const geocodeLocation = async (locationString) => {
     const response = await axios.get("http://api.openweathermap.org/geo/1.0/direct", {
-        params: { q: locationString, limit: 1, appid: OWM_KEY }
+        params: { q: locationString, limit: 1, appid: OWM_KEY },
+        timeout: 8000 
     })
     if (!response.data || response.data.length === 0) {
         throw new Error(`Could not find location: "${locationString}". Please update your farm location in Settings.`)
@@ -34,7 +36,8 @@ const fetchForecast = async (lat, lon) => {
             exclude: "minutely,alerts",
             units:   "metric",
             appid:   OWM_KEY
-        }
+        },
+        timeout: 8000 
     })
     return response.data
 }
@@ -289,6 +292,29 @@ const getForecast = async (req, res) => {
             tempTiming: formattedForecast[0].tempTiming
         }, rules, crops)
 
+        // ── send weather alert email if threshold breached — fresh fetch only ──
+        if (todayDecision.alert) {
+            sendMail({
+                to: farmer.email,
+                subject: `⚠️ Weather Alert — ${
+                    todayDecision.alert.type === 'flood' ? 'Heavy Rain Expected'
+                    : todayDecision.alert.type === 'wind' ? 'High Wind Warning'
+                    : 'Extreme Heat Warning'
+                }`,
+                template: 'weather-alert.ejs',
+                data: {
+                    name:      farmer.fullName,
+                    location:  farmer.farmLocation,
+                    alert:     todayDecision.alert,
+                    temp:      formattedCurrent.temp,
+                    rain:      formattedCurrent.rain,
+                    humidity:  formattedCurrent.humidity,
+                    windSpeed: formattedCurrent.windSpeed
+                }
+            }).catch(err => console.error('Weather alert email failed:', err.message))
+            // note: no await — fire and forget so it doesn't delay the response
+        }
+        
         return res.status(200).json({
             message:   "Weather data retrieved (fresh)",
             cached:    false,

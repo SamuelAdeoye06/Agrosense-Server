@@ -50,6 +50,15 @@ const register = async (req, res) => {
         })
 
         const token = generateToken(user._id, user.role)
+        
+        await sendMail({
+            to: user.email,
+            subject: 'Welcome to AgroSense 🌱',
+            template: 'welcome.ejs',
+            data: {
+                name: user.fullName
+            }
+        })
 
         res.status(201).json({
             message: "Account created successfully",
@@ -62,15 +71,6 @@ const register = async (req, res) => {
                 role: user.role, 
                 avatarUrl: user.avatarUrl,
                 cropProfiles: user.cropProfiles, 
-            }
-        })
-
-        await sendMail({
-            to: user.email,
-            subject: 'Welcome to AgroSense 🌱',
-            template: 'welcome.ejs',
-            data: {
-                name: user.fullName
             }
         })
 
@@ -111,18 +111,6 @@ const createAdmin = async (req, res) => {
             role: "admin"
         })
 
-        res.status(201).json({
-            message: "Admin account created successfully",
-            admin: {
-                id: admin._id,
-                fullName: admin.fullName,
-                email: admin.email,
-                role: admin.role,
-                avatarUrl: admin.avatarUrl,
-            }
-        })
-
-        // ── fetch the super admin who made this request ──
         const superAdmin = await User.findById(req.user._id)
 
         const createdAt = new Date().toLocaleString("en-GB", {
@@ -131,28 +119,37 @@ const createAdmin = async (req, res) => {
             timeZone: "Africa/Lagos"
         })
 
-        // Email to the new admin
         await sendMail({
             to: admin.email,
             subject: 'Your AgroSense Admin Account Has Been Created',
             template: 'admin-created.ejs',
             data: {
-                name: admin.fullName,
-                email: admin.email,
+                name:      admin.fullName,
+                email:     admin.email,
                 createdBy: superAdmin.fullName
             }
-        })
+        }).catch(err => console.error('Admin created email failed:', err.message))
 
-        // Email to the super admin as confirmation
         await sendMail({
             to: superAdmin.email,
             subject: 'Admin Account Created — AgroSense',
             template: 'admin-created-superadmin-notify.ejs',
             data: {
                 superAdminName: superAdmin.fullName,
-                newAdminName: admin.fullName,
-                newAdminEmail: admin.email,
+                newAdminName:   admin.fullName,
+                newAdminEmail:  admin.email,
                 createdAt
+            }
+        }).catch(err => console.error('Super admin notify email failed:', err.message))
+
+        res.status(201).json({
+            message: "Admin account created successfully",
+            admin: {
+                id:       admin._id,
+                fullName: admin.fullName,
+                email:    admin.email,
+                role:     admin.role,
+                avatarUrl: admin.avatarUrl,
             }
         })
 
@@ -284,8 +281,6 @@ const deleteFarmer = async (req, res) => {
         await SavedDate.deleteMany({ farmerId: farmer._id })
         await User.findByIdAndDelete(id)
 
-        res.status(200).json({ message: "Farmer deleted successfully" })
-
         // ── only email if an admin deleted them, not self-delete ──
         if (isAdminDelete) {
             await sendMail({
@@ -299,6 +294,8 @@ const deleteFarmer = async (req, res) => {
                 }
             })
         }
+
+        res.status(200).json({ message: "Farmer deleted successfully" })
 
     } catch (error) {
         console.error("Delete farmer error:", error.message)
@@ -342,8 +339,6 @@ const deleteAdmin = async (req, res) => {
 
         await User.findByIdAndDelete(id)
 
-        res.status(200).json({ message: "Admin deleted successfully" })
-
         await sendMail({
             to: adminEmail,
             subject: "Your AgroSense Admin Account Has Been Removed",
@@ -354,6 +349,9 @@ const deleteAdmin = async (req, res) => {
                 actionDate
             }
         })
+
+        res.status(200).json({ message: "Admin deleted successfully" })
+
 
     } catch (error) {
         console.error("Delete admin error:", error.message)
@@ -401,11 +399,6 @@ const toggleFarmerStatus = async (req, res) => {
         farmer.status = farmer.status === "active" ? "inactive" : "active"
         await farmer.save()
 
-        res.status(200).json({
-            message: `Farmer ${farmer.status === "active" ? "activated" : "deactivated"} successfully`,
-            status: farmer.status
-        })
-
         const actionDate = new Date().toLocaleString("en-GB", {
             dateStyle: "full",
             timeStyle: "short",
@@ -419,10 +412,15 @@ const toggleFarmerStatus = async (req, res) => {
                 : "Your AgroSense Account Has Been Deactivated",
             template: "farmer-status.ejs",
             data: {
-                name: farmer.fullName,
-                status: farmer.status,
+                name:       farmer.fullName,
+                status:     farmer.status,
                 actionDate
             }
+        }).catch(err => console.error('Farmer status email failed:', err.message))
+
+        res.status(200).json({
+            message: `Farmer ${farmer.status === "active" ? "activated" : "deactivated"} successfully`,
+            status: farmer.status
         })
 
     } catch (error) {
@@ -453,11 +451,6 @@ const toggleAdminStatus = async (req, res) => {
         admin.status = admin.status === "active" ? "inactive" : "active"
         await admin.save()
 
-        res.status(200).json({
-            message: `Admin ${admin.status === "active" ? "activated" : "deactivated"} successfully`,
-            status: admin.status
-        })
-
         const actionDate = new Date().toLocaleString("en-GB", {
             dateStyle: "full",
             timeStyle: "short",
@@ -471,10 +464,15 @@ const toggleAdminStatus = async (req, res) => {
                 : "Your AgroSense Admin Account Has Been Deactivated",
             template: "admin-status.ejs",
             data: {
-                name: admin.fullName,
-                status: admin.status,
+                name:       admin.fullName,
+                status:     admin.status,
                 actionDate
             }
+        }).catch(err => console.error('Admin status email failed:', err.message))
+
+        res.status(200).json({
+            message: `Admin ${admin.status === "active" ? "activated" : "deactivated"} successfully`,
+            status: admin.status
         })
 
     } catch (error) {
@@ -575,8 +573,6 @@ const changePassword = async (req, res) => {
         user.password = await bcrypt.hash(newPassword, salt)
         await user.save()
 
-        res.status(200).json({ message: "Password changed successfully" })
-
         const actionDate = new Date().toLocaleString("en-GB", {
             dateStyle: "full",
             timeStyle: "short",
@@ -584,15 +580,17 @@ const changePassword = async (req, res) => {
         })
 
         await sendMail({
-            to: user.email,
-            subject: "Your AgroSense Password Has Been Changed",
+            to:       user.email,
+            subject:  "Your AgroSense Password Has Been Changed",
             template: "password-changed.ejs",
             data: {
-                name: user.fullName,
-                email: user.email,
+                name:       user.fullName,
+                email:      user.email,
                 actionDate
             }
-        })
+        }).catch(err => console.error('Password changed email failed:', err.message))
+
+        res.status(200).json({ message: "Password changed successfully" })
 
     } catch (error) {
         console.error("Change password error:", error.message)
@@ -888,22 +886,28 @@ const resetPassword = async (req, res) => {
             return res.status(404).json({ message: 'User not found' })
         }
 
-        const salt     = await bcrypt.genSalt(10)
-        user.password  = await bcrypt.hash(newPassword, salt)
+        const salt    = await bcrypt.genSalt(10)
+        user.password = await bcrypt.hash(newPassword, salt)
         await user.save()
 
-        res.status(200).json({ message: 'Password reset successfully' })
-
         const actionDate = new Date().toLocaleString("en-GB", {
-            dateStyle: "full", timeStyle: "short", timeZone: "Africa/Lagos"
+            dateStyle: "full",
+            timeStyle: "short",
+            timeZone: "Africa/Lagos"
         })
 
         await sendMail({
             to:       user.email,
             subject:  'Your AgroSense Password Has Been Reset',
             template: 'password-changed.ejs',
-            data: { name: user.fullName, email: user.email, actionDate }
-        })
+            data: {
+                name:       user.fullName,
+                email:      user.email,
+                actionDate
+            }
+        }).catch(err => console.error('Reset password email failed:', err.message))
+
+        res.status(200).json({ message: 'Password reset successfully' })
 
     } catch (error) {
         console.error('Reset password error:', error.message)

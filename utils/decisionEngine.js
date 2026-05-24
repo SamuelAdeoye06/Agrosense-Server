@@ -355,11 +355,11 @@ const evaluateDay = (weather, rules, cropCategories = []) => {
     const recommendedActivities = []
     if (activities.planting)   recommendedActivities.push({ key: "planting",   icon: "🌱", label: "Planting" })
     if (activities.harvesting) recommendedActivities.push({ key: "harvesting", icon: "🌾", label: "Harvesting" })
-    if (activities.spraying)   recommendedActivities.push({ key: "spraying",   icon: "🧪", label: "Spraying" })
-    if (activities.irrigation) recommendedActivities.push({ key: "irrigation", icon: "💧", label: "Irrigation" })
-    if (activities.weeding)    recommendedActivities.push({ key: "weeding",    icon: "🌿", label: "Weeding" })
+    if (activities.spraying)   recommendedActivities.push({ key: "spraying",   icon: "🧴", label: "Spraying" })
+    if (activities.irrigation) recommendedActivities.push({ key: "irrigation", icon: "🚿", label: "Irrigation" })
+    if (activities.weeding)    recommendedActivities.push({ key: "weeding",    icon: "🪚", label: "Weeding" })
     if (activities.tillage)    recommendedActivities.push({ key: "tillage",    icon: "🚜", label: "Tillage" })
-    if (activities.fertilizing)recommendedActivities.push({ key: "fertilizing", icon: "🪱", label: "Fertilizing" })
+    if (activities.fertilizing)recommendedActivities.push({ key: "fertilizing", icon: "🧺", label: "Fertilizing" })
     if (activities.pruning)    recommendedActivities.push({ key: "pruning",    icon: "✂️", label: "Pruning" })
 
     // ── Main recommendation text ──

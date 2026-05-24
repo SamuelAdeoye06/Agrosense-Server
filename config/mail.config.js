@@ -8,12 +8,14 @@ const transporter = nodemailer.createTransport({
     }
 })
 
-transporter.verify((error, success) => {
-    if (error) {
-        console.error('❌ Mail transporter error:', error.message)
-    } else {
-        console.log('✅ Mail transporter ready')
-    }
-})
+if (process.env.NODE_ENV !== 'production') {
+    transporter.verify((error) => {
+        if (error) {
+            console.error('Mail transporter error:', error.message)
+        } else {
+            console.log('Mail transporter ready')
+        }
+    })
+}
 
 module.exports = transporter
